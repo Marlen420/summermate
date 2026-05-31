@@ -28,7 +28,12 @@
         "backgroundColor": "#ff7c0a"
       },
       "package": "app.summermate.mobile",
-      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA", "READ_EXTERNAL_STORAGE"]
+      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA", "READ_EXTERNAL_STORAGE"],
+      "config": {
+        "googleMaps": {
+          "apiKey": "your-google-maps-api-key"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useActivities } from "@/hooks/use-activities";
 import { Loader2 } from "lucide-react";
 
-// Leaflet must be dynamically imported (no SSR)
+// Google Maps SDK must be loaded client-side only
 const ActivityMap = dynamic(() => import("@/components/map/ActivityMap"), {
   ssr: false,
   loading: () => (

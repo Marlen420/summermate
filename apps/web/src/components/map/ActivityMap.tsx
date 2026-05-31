@@ -1,43 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import { useState, useCallback } from "react";
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api";
 import Link from "next/link";
 import { Calendar, Users, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, categoryEmoji, priceLevelLabel } from "@/lib/utils";
-import type L from "leaflet";
 
-// Icons are patched inside useEffect to avoid HMR / SSR issues
-let leafletIconsPatched = false;
-
-function patchLeafletIcons(L: typeof import("leaflet")) {
-  if (leafletIconsPatched) return;
-  leafletIconsPatched = true;
-  delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-  });
-}
-
-function createActivityIcon(L: typeof import("leaflet"), category: string) {
-  const emoji = categoryEmoji(category);
-  return L.divIcon({
-    html: `
-      <div class="flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border-2 border-orange-500 text-xl cursor-pointer hover:scale-110 transition-transform">
-        ${emoji}
-      </div>
-    `,
-    className: "",
-    iconSize: [40, 40],
-    iconAnchor: [20, 40],
-    popupAnchor: [0, -40],
-  });
-}
+const MAP_OPTIONS: google.maps.MapOptions = {
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: true,
+  zoomControl: true,
+  styles: [
+    { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
+  ],
+};
 
 interface Activity {
   id: string;
@@ -58,127 +38,121 @@ interface Activity {
 interface ActivityMapProps {
   activities: Activity[];
   isLoading?: boolean;
-  center?: [number, number];
+  center?: { lat: number; lng: number };
   zoom?: number;
-}
-
-function UserLocationButton() {
-  const map = useMap();
-
-  const goToLocation = () => {
-    navigator.geolocation.getCurrentPosition((pos) => {
-      map.flyTo([pos.coords.latitude, pos.coords.longitude], 14, {
-        animate: true,
-        duration: 1.5,
-      });
-    });
-  };
-
-  return (
-    <button
-      onClick={goToLocation}
-      className="absolute bottom-4 right-4 z-[1000] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-border p-2.5 hover:bg-accent transition-colors"
-      title="Go to my location"
-    >
-      <MapPin className="w-5 h-5 text-primary" />
-    </button>
-  );
 }
 
 export default function ActivityMap({
   activities,
   isLoading,
-  center = [48.8566, 2.3522],
+  center = { lat: 48.8566, lng: 2.3522 },
   zoom = 12,
 }: ActivityMapProps) {
-  const [mounted, setMounted] = useState(false);
-  const [L, setL] = useState<typeof import("leaflet") | null>(null);
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
+  });
+
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [, setMap] = useState<google.maps.Map | null>(null);
 
-  useEffect(() => {
-    // Dynamically import Leaflet so icons can be patched after the module loads
-    import("leaflet").then((mod) => {
-      patchLeafletIcons(mod.default);
-      setL(mod.default);
-      setMounted(true);
-    });
-    // Returning false-setter ensures MapContainer is removed from the DOM
-    // before a potential remount (React 18 StrictMode / HMR), preventing
-    // the "Map container is already initialized" Leaflet error.
-    return () => setMounted(false);
-  }, []);
+  const onLoad = useCallback((map: google.maps.Map) => setMap(map), []);
+  const onUnmount = useCallback(() => setMap(null), []);
 
-  if (!mounted || !L) return null;
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center w-full h-full gap-3 text-muted-foreground">
+        <MapPin className="w-8 h-8 text-destructive" />
+        <p className="text-sm">Failed to load Google Maps.</p>
+        <p className="text-xs">Check your API key in <code>.env</code>.</p>
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center w-full h-full">
+        <div className="text-sm text-muted-foreground animate-pulse">Loading map…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full">
-      <MapContainer
+      <GoogleMap
+        mapContainerClassName="w-full h-full"
         center={center}
         zoom={zoom}
-        className="w-full h-full"
-        zoomControl={false}
+        options={MAP_OPTIONS}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        onClick={() => setSelectedActivity(null)}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
         {activities.map((activity) => (
           <Marker
             key={activity.id}
-            position={[activity.latitude, activity.longitude]}
-            icon={createActivityIcon(L, activity.category)}
-            eventHandlers={{
-              click: () => setSelectedActivity(activity),
+            position={{ lat: activity.latitude, lng: activity.longitude }}
+            label={{
+              text: categoryEmoji(activity.category),
+              fontSize: "22px",
             }}
-          >
-            <Popup maxWidth={280} className="activity-popup">
-              <div className="p-1">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="font-bold text-sm leading-tight">{activity.title}</h3>
-                  <Badge variant="default" className="text-xs shrink-0">
-                    {priceLevelLabel(activity.priceLevel)}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1 text-xs text-muted-foreground mb-3">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(activity.date)}
-                  </div>
-                  {activity.city && (
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {activity.city}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <Users className="w-3 h-3" />
-                    {activity._count.participants}
-                    {activity.maxParticipants ? ` / ${activity.maxParticipants}` : ""} going
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                  {activity.description}
-                </p>
-
-                <Link href={`/activities/${activity.id}`}>
-                  <Button size="sm" className="w-full text-xs h-8">
-                    View & Join
-                  </Button>
-                </Link>
-              </div>
-            </Popup>
-          </Marker>
+            onClick={() => setSelectedActivity(activity)}
+          />
         ))}
 
-        <UserLocationButton />
-      </MapContainer>
+        {selectedActivity && (
+          <InfoWindow
+            position={{ lat: selectedActivity.latitude, lng: selectedActivity.longitude }}
+            onCloseClick={() => setSelectedActivity(null)}
+          >
+            <div className="p-1 max-w-[260px]">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="font-bold text-sm leading-tight text-gray-900">
+                  {selectedActivity.title}
+                </h3>
+                <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium shrink-0">
+                  {priceLevelLabel(selectedActivity.priceLevel)}
+                </span>
+              </div>
+
+              <div className="space-y-1 text-xs text-gray-500 mb-3">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {formatDate(selectedActivity.date)}
+                </div>
+                {selectedActivity.city && (
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {selectedActivity.city}
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  {selectedActivity._count.participants}
+                  {selectedActivity.maxParticipants
+                    ? ` / ${selectedActivity.maxParticipants}`
+                    : ""}{" "}
+                  going
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 mb-3 line-clamp-2">
+                {selectedActivity.description}
+              </p>
+
+              <Link href={`/activities/${selectedActivity.id}`}>
+                <Button size="sm" className="w-full text-xs h-8">
+                  View & Join
+                </Button>
+              </Link>
+            </div>
+          </InfoWindow>
+        )}
+      </GoogleMap>
 
       {isLoading && (
-        <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-[999]">
-          <div className="text-sm text-muted-foreground">Loading activities...</div>
+        <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10">
+          <div className="text-sm text-gray-500 animate-pulse">Loading activities…</div>
         </div>
       )}
     </div>
