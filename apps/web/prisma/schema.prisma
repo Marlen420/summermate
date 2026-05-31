@@ -1,0 +1,340 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  EVENT_INVITATION
+  CHAT_MENTION
+  NEW_ACTIVITY_NEARBY
+  ACTIVITY_JOINED
+  ACTIVITY_CANCELLED
+}
+
+enum PriceLevel {
+  FREE
+  CHEAP
+  MODERATE
+  EXPENSIVE
+}
+
+enum Mood {
+  ADVENTUROUS
+  RELAXED
+  SOCIAL
+  CREATIVE
+  ACTIVE
+  ROMANTIC
+  FAMILY
+  SOLO
+}
+
+enum ActivityCategory {
+  HIKING
+  SPORTS
+  MOVIES
+  FESTIVALS
+  PHOTOGRAPHY
+  FOOD
+  MUSIC
+  GAMING
+  CYCLING
+  CAMPING
+  TRAVEL
+  ART
+  WELLNESS
+  NIGHTLIFE
+  OUTDOOR
+  INDOOR
+  OTHER
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  avatarUrl    String?
+  bio          String?
+  city         String?
+  isOnline     Boolean  @default(false)
+  lastSeenAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  interests            UserInterest[]
+  sentFriendRequests   FriendRequest[]      @relation("SentRequests")
+  receivedFriendRequests FriendRequest[]    @relation("ReceivedRequests")
+  friendshipsA         Friendship[]         @relation("FriendA")
+  friendshipsB         Friendship[]         @relation("FriendB")
+  createdActivities    Activity[]           @relation("ActivityCreator")
+  participations       ActivityParticipant[]
+  messages             ActivityMessage[]
+  ratings              ActivityRating[]
+  photos               ActivityPhoto[]
+  routes               Route[]
+  notifications        Notification[]
+  refreshTokens        RefreshToken[]
+
+  @@index([email])
+  @@index([username])
+  @@index([city])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Interests ────────────────────────────────────────────────────────────────
+
+model Interest {
+  id    String           @id @default(uuid())
+  name  String           @unique
+  icon  String?
+  category ActivityCategory?
+
+  users UserInterest[]
+
+  @@map("interests")
+}
+
+model UserInterest {
+  userId     String
+  interestId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([userId, interestId])
+  @@map("user_interests")
+}
+
+// ─── Friendships ──────────────────────────────────────────────────────────────
+
+model FriendRequest {
+  id         String           @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendshipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender   User @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId, status])
+  @@map("friend_requests")
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA User @relation("FriendA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+  @@map("friendships")
+}
+
+// ─── Activities ───────────────────────────────────────────────────────────────
+
+model Activity {
+  id              String           @id @default(uuid())
+  title           String
+  description     String
+  category        ActivityCategory
+  mood            Mood
+  date            DateTime
+  latitude        Float
+  longitude       Float
+  address         String?
+  city            String?
+  creatorId       String
+  maxParticipants Int?
+  priceLevel      PriceLevel       @default(FREE)
+  sourceUrl       String?
+  isCancelled     Boolean          @default(false)
+  viewCount       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  creator      User                 @relation("ActivityCreator", fields: [creatorId], references: [id])
+  participants ActivityParticipant[]
+  messages     ActivityMessage[]
+  ratings      ActivityRating[]
+  photos       ActivityPhoto[]
+  notifications Notification[]
+
+  @@index([creatorId])
+  @@index([date])
+  @@index([category])
+  @@index([mood])
+  @@index([priceLevel])
+  @@index([city])
+  @@index([latitude, longitude])
+  @@map("activities")
+}
+
+model ActivityParticipant {
+  id         String   @id @default(uuid())
+  activityId String
+  userId     String
+  joinedAt   DateTime @default(now())
+  leftAt     DateTime?
+  isInvited  Boolean  @default(false)
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@index([userId])
+  @@index([activityId])
+  @@map("activity_participants")
+}
+
+model ActivityMessage {
+  id          String   @id @default(uuid())
+  activityId  String
+  userId      String
+  content     String
+  isDeleted   Boolean  @default(false)
+  readBy      String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, createdAt])
+  @@index([userId])
+  @@map("activity_messages")
+}
+
+model ActivityRating {
+  id           String   @id @default(uuid())
+  activityId   String
+  userId       String
+  activityScore Int      // 1-5
+  organizationScore Int  // 1-5
+  funScore     Int       // 1-5
+  review       String?
+  createdAt    DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@index([activityId])
+  @@map("activity_ratings")
+}
+
+model ActivityPhoto {
+  id         String   @id @default(uuid())
+  activityId String
+  userId     String
+  url        String
+  key        String   // S3 key
+  caption    String?
+  width      Int?
+  height     Int?
+  sizeBytes  Int?
+  createdAt  DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([activityId])
+  @@index([userId])
+  @@map("activity_photos")
+}
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+model Route {
+  id               String   @id @default(uuid())
+  name             String
+  userId           String
+  estimatedMinutes Int?
+  distanceMeters   Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  points RoutePoint[]
+
+  @@index([userId])
+  @@map("routes")
+}
+
+model RoutePoint {
+  id        String  @id @default(uuid())
+  routeId   String
+  order     Int
+  latitude  Float
+  longitude Float
+  label     String?
+
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([routeId, order])
+  @@map("route_points")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String
+  type       NotificationType
+  title      String
+  body       String
+  isRead     Boolean          @default(false)
+  actorId    String?          // user who triggered notification
+  activityId String?
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}

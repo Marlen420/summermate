@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "SummerMate",
+    "slug": "summermate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ff7c0a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.summermate.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SummerMate uses your location to show nearby activities.",
+        "NSLocationAlwaysUsageDescription": "SummerMate uses your location to notify you about nearby activities.",
+        "NSCameraUsageDescription": "SummerMate needs camera access to take photos for activities.",
+        "NSPhotoLibraryUsageDescription": "SummerMate needs photo library access to upload activity photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ff7c0a"
+      },
+      "package": "app.summermate.mobile",
+      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SummerMate needs photo library access."
+        }
+      ]
+    ],
+    "scheme": "summermate",
+    "extra": {
+      "apiUrl": "http://localhost:3000/api",
+      "socketUrl": "http://localhost:3000"
+    }
+  }
+}

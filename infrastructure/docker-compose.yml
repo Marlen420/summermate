@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: summermate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-summermate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-summermate_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-summermate_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-summermate} -d ${POSTGRES_DB:-summermate_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - summermate-network
+
+  local-s3:
+    image: luofuxiang/local-s3
+    container_name: summermate-s3
+    restart: unless-stopped
+    environment:
+      S3_ENDPOINT: http://local-s3:8080
+    ports:
+      - "${S3_PORT:-8080}:8080"
+    volumes:
+      - s3_data:/data
+      - ./local-s3/config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - summermate-network
+
+volumes:
+  postgres_data:
+    driver: local
+  s3_data:
+    driver: local
+
+networks:
+  summermate-network:
+    driver: bridge

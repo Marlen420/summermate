@@ -1,0 +1,17 @@
+{
+  "port": 8080,
+  "buckets": [
+    {
+      "name": "summermate-avatars",
+      "region": "us-east-1"
+    },
+    {
+      "name": "summermate-activities",
+      "region": "us-east-1"
+    },
+    {
+      "name": "summermate-galleries",
+      "region": "us-east-1"
+    }
+  ]
+}
